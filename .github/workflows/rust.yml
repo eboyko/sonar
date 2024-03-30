@@ -1,9 +1,8 @@
-name: Rust
+name: Base
 
-on:
-  push:
-    tags:
-      - '*'
+permissions: write-all
+
+on: push
 
 env:
   CARGO_TERM_COLOR: always
@@ -11,7 +10,6 @@ env:
 jobs:
   release:
     name: ${{ matrix.target }}
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -43,8 +41,7 @@ jobs:
           tar cfvz ../../../sonar-${{ matrix.target }}.tar.gz sonar
           cd -
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
         with:
           files: 'sonar*'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
