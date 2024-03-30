@@ -22,7 +22,7 @@ jobs:
           #  os: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -43,7 +43,7 @@ jobs:
           tar cfvz ../../../sonar-${{ matrix.target }}.tar.gz sonar
           cd -
       - name: Publish
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: 'sonar*'
         env:
