@@ -1,7 +1,7 @@
 mod command_line_parser;
-mod settings;
-mod recorder;
 mod listener;
+mod recorder;
+mod settings;
 
 use log::error;
 

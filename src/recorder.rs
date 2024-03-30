@@ -1,7 +1,7 @@
+use log::{debug, error};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
-use log::{debug, error};
 
 use chrono::Utc;
 
@@ -13,12 +13,10 @@ pub(crate) struct Recorder {
 impl Recorder {
     pub fn write(&mut self, data: &[u8]) {
         match self.file {
-            Some(ref mut file) => {
-                match file.write_all(data) {
-                    Ok(_) => debug!("{} bytes written", data.len()),
-                    Err(error) => error!("Could not write the data: {}", error)
-                }
-            }
+            Some(ref mut file) => match file.write_all(data) {
+                Ok(_) => debug!("{} bytes written", data.len()),
+                Err(error) => error!("Could not write the data: {}", error),
+            },
             None => {
                 self.create_file();
                 self.write(data);
@@ -30,7 +28,7 @@ impl Recorder {
         if let Some(file) = &mut self.file {
             match file.flush() {
                 Ok(_) => self.file = None,
-                Err(error) => error!("Could not flush the file: {}", error)
+                Err(error) => error!("Could not flush the file: {}", error),
             }
         }
     }
@@ -41,7 +39,7 @@ impl Recorder {
 
         match OpenOptions::new().create(true).append(true).open(filepath) {
             Ok(file) => self.file = Some(file),
-            Err(error) => error!("Could not create the file: {}", error)
+            Err(error) => error!("Could not create the file: {}", error),
         };
     }
 }

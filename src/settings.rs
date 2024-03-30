@@ -8,12 +8,19 @@ pub(crate) struct Settings {
 pub(crate) fn build() -> Result<Settings, String> {
     let preferences = match fetch_arguments() {
         Ok(arguments) => arguments,
-        Err(message) => return Err(message)
+        Err(message) => return Err(message),
     };
 
-    let path = preferences.get("path").ok_or("Mandatory `path` argument missing")?;
-    let url = preferences.get("url").ok_or("Mandatory `url` argument missing")?;
+    let path = preferences
+        .get("path")
+        .ok_or("Mandatory `path` argument missing")?;
 
-    Ok(Settings { path: path.to_string(), url: url.to_string() })
+    let url = preferences
+        .get("url")
+        .ok_or("Mandatory `url` argument missing")?;
+
+    Ok(Settings {
+        path: path.to_string(),
+        url: url.to_string(),
+    })
 }
-

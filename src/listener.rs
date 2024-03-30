@@ -1,7 +1,6 @@
-use std::thread::sleep;
-use log::{debug, error, info};
-
 use crate::recorder::Recorder;
+use log::{debug, error, info};
+use std::thread::sleep;
 
 pub(crate) struct Listener {
     url: String,

@@ -16,16 +16,21 @@ pub(crate) fn fetch_arguments() -> Result<HashMap<String, String>, String> {
     for raw_argument_parts in raw_arguments.chunks(2) {
         match fetch_argument(raw_argument_parts.first(), raw_argument_parts.last()) {
             Ok((key, value)) => arguments.insert(key, value),
-            Err(message) => return Err(message)
+            Err(message) => return Err(message),
         };
     }
 
     Ok(arguments)
 }
 
-fn fetch_argument(raw_key: Option<&String>, raw_value: Option<&String>) -> Result<(String, String), String> {
+fn fetch_argument(
+    raw_key: Option<&String>,
+    raw_value: Option<&String>,
+) -> Result<(String, String), String> {
     if let (Some(raw_key), Some(raw_value)) = (raw_key, raw_value) {
-        let key = raw_key.strip_prefix("--").ok_or(format!("Invalid argument prefix found: `{}`", raw_key))?;
+        let key = raw_key
+            .strip_prefix("--")
+            .ok_or(format!("Invalid argument prefix found: `{}`", raw_key))?;
 
         if !PERMITTED_ARGUMENTS.contains(&key) {
             return Err(format!("Unknown argument `{}` passed", key));
