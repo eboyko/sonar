@@ -1,5 +1,5 @@
 use std::thread::sleep;
-use log::{debug, error, warn};
+use log::{debug, error, info};
 
 use crate::recorder::Recorder;
 
@@ -9,10 +9,6 @@ pub(crate) struct Listener {
 }
 
 impl Listener {
-    pub fn new(url: String, recorder: Recorder) -> Self {
-        Self { url, recorder }
-    }
-
     pub fn start(&mut self) {
         let default_timeout = std::time::Duration::from_secs(5);
 
@@ -30,7 +26,7 @@ impl Listener {
                 loop {
                     match reader.read(&mut buffer) {
                         Ok(0) => {
-                            warn!("End of stream reached");
+                            info!("End of stream reached");
                             self.recorder.flush();
                             break;
                         }
@@ -51,4 +47,8 @@ impl Listener {
             sleep(default_timeout);
         }
     }
+}
+
+pub(crate) fn build(url: String, recorder: Recorder) -> Listener {
+    Listener { url, recorder }
 }

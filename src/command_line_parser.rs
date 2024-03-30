@@ -5,12 +5,12 @@ use url::Url;
 // List of arguments that can be passed to the application from the command line
 const PERMITTED_ARGUMENTS: [&str; 2] = ["path", "url"];
 
-pub(crate) fn fetch_arguments() -> Result<HashMap<String, String>, &'static str> {
+pub(crate) fn fetch_arguments() -> Result<HashMap<String, String>, String> {
     let mut arguments = HashMap::new();
 
     let raw_arguments: Vec<String> = env::args().skip(1).collect();
     if raw_arguments.len() % 2 != 0 {
-        return Err("Arguments string is corrupted");
+        return Err("Command line arguments are broken".to_string());
     }
 
     for raw_argument_parts in raw_arguments.chunks(2) {
@@ -23,20 +23,20 @@ pub(crate) fn fetch_arguments() -> Result<HashMap<String, String>, &'static str>
     Ok(arguments)
 }
 
-fn fetch_argument(raw_key: Option<&String>, raw_value: Option<&String>) -> Result<(String, String), &'static str> {
+fn fetch_argument(raw_key: Option<&String>, raw_value: Option<&String>) -> Result<(String, String), String> {
     if let (Some(raw_key), Some(raw_value)) = (raw_key, raw_value) {
-        let key = raw_key.strip_prefix("--").ok_or("Non-prefixed argument found")?;
+        let key = raw_key.strip_prefix("--").ok_or(format!("Invalid argument prefix found: `{}`", raw_key))?;
 
         if !PERMITTED_ARGUMENTS.contains(&key) {
-            return Err("Unknown argument");
+            return Err(format!("Unknown argument `{}` passed", key));
         }
 
         if key == "url" && Url::parse(raw_value).is_err() {
-            return Err("Invalid URL value format");
+            return Err(format!("Invalid URL format: {}", raw_value));
         }
 
         Ok((key.to_string(), raw_value.to_string()))
     } else {
-        Err("Argument is corrupted")
+        Err("An argument is corrupted".to_string())
     }
 }
