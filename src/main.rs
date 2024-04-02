@@ -1,4 +1,5 @@
 mod command_line_parser;
+mod error;
 mod listener;
 mod recorder;
 mod settings;
@@ -16,7 +17,7 @@ fn main() {
         }
     };
 
-    let recorder = match recorder::build(settings.path) {
+    let recorder = match recorder::build(settings.path.clone()) {
         Ok(recorder) => recorder,
         Err(message) => {
             error!("{}", message);
@@ -24,6 +25,6 @@ fn main() {
         }
     };
 
-    let mut listener = listener::build(settings.url, recorder);
+    let mut listener = listener::build(settings, recorder);
     listener.start();
 }

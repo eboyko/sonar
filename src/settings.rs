@@ -1,8 +1,10 @@
 use crate::command_line_parser::fetch_arguments;
+use std::time::Duration;
 
 pub(crate) struct Settings {
     pub(crate) path: String,
     pub(crate) url: String,
+    pub(crate) timeout: Duration,
 }
 
 pub(crate) fn build() -> Result<Settings, String> {
@@ -22,5 +24,6 @@ pub(crate) fn build() -> Result<Settings, String> {
     Ok(Settings {
         path: path.to_string(),
         url: url.to_string(),
+        timeout: Duration::from_secs(5),
     })
 }
