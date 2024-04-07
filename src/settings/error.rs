@@ -26,3 +26,9 @@ impl From<&str> for Error {
         Error::ArgumentMissed(error.to_string())
     }
 }
+
+impl From<Error> for std::fmt::Error {
+    fn from(error: Error) -> Self {
+        error.into()
+    }
+}
