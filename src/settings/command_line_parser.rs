@@ -2,11 +2,8 @@ use std::collections::HashMap;
 use std::env;
 
 use url::Url;
-
-use crate::command_line_parser::error::Error;
-use crate::command_line_parser::error::Error::{ArgumentInvalid, ArgumentPrefixCorrupted, CommandLineCorrupted, UrlFormatInvalid};
-
-mod error;
+use crate::settings::error::Error;
+use crate::settings::error::Error::{ArgumentInvalid, ArgumentPrefixCorrupted, CommandLineCorrupted, UrlFormatInvalid};
 
 // List of arguments that can be passed to the application from the command line
 const PERMITTED_ARGUMENTS: [&str; 2] = ["path", "url"];
