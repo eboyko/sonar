@@ -1,6 +1,6 @@
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{Error, Write};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Acquire;
@@ -8,8 +8,11 @@ use std::sync::atomic::Ordering::Acquire;
 use chrono::Utc;
 use log::error;
 
-use crate::error::Error;
-use crate::error::Error::FileCreation;
+use crate::recorder::error::Error as RecorderError;
+use crate::recorder::error::Error::OperationFailed;
+
+mod tests;
+mod error;
 
 pub struct Recorder {
     path: String,
@@ -31,15 +34,18 @@ impl Recorder {
     }
 
     pub fn write(&self, data: &[u8]) {
-        let mut file = self.file.lock().unwrap();
+        let mut current_file = self.file.lock().unwrap();
 
-        if file.as_mut().is_none() {
-            *file = Some(self.create_file().unwrap());
+        if current_file.as_mut().is_none() {
+            match self.create_file() {
+                Ok(new_file) => *current_file = Some(new_file),
+                Err(error) => error!("{}", error)
+            }
         }
 
-        match file.as_mut().unwrap().write_all(data) {
+        match current_file.as_mut().unwrap().write_all(data) {
             Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); }
-            Err(error) => error!("Could not write the data: {}", error)
+            Err(error) => error!("{}", error),
         }
     }
 
@@ -49,18 +55,16 @@ impl Recorder {
                 file.flush().unwrap();
                 *lock = None;
             }
-        } else {
-            error!("Unable to get the lock");
         }
     }
 
-    fn create_file(&self) -> Result<File, Error> {
+    fn create_file(&self) -> Result<File, RecorderError> {
         let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let filepath = format!("{}/{}.mp3", self.path, timestamp);
 
         match OpenOptions::new().create(true).append(true).open(filepath) {
             Ok(file) => Ok(file),
-            Err(_) => Err(FileCreation),
+            Err(error) => Err(OperationFailed(error)),
         }
     }
 }
@@ -68,16 +72,4 @@ impl Recorder {
 pub(crate) fn build(path: String) -> Result<Arc<Recorder>, Error> {
     fs::create_dir_all(&path)?;
     Ok(Arc::new(Recorder::new(path)))
-}
-
-#[cfg(test)]
-mod tests {
-    const TEMPORARY_STORAGE_PATH: &str = "tmp/storage";
-
-    #[test]
-    fn build() {
-        super::build(TEMPORARY_STORAGE_PATH.to_string()).unwrap();
-        assert!(std::path::Path::new(TEMPORARY_STORAGE_PATH).exists());
-        std::fs::remove_dir_all(TEMPORARY_STORAGE_PATH).unwrap();
-    }
 }
