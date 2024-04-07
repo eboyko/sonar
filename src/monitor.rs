@@ -6,7 +6,7 @@ use std::time::Instant;
 use http_body_util::Full;
 use hyper::{Request, Response};
 use hyper::body::{Bytes, Incoming};
-use hyper::server::conn::http1;
+use hyper::server::conn::{http1};
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use log::error;
@@ -46,17 +46,11 @@ impl Monitor {
     }
 
     pub async fn start(&self) -> Result<(), MonitorError> {
-        let server = self.create_server().await?;
-
+        let server = self.create_server().await.unwrap();
         loop {
             select! {
-                connection = server.accept() => {
-                    let monitor = self.clone();
-                    tokio::task::spawn(async move {
-                        monitor.process_connection(connection).await
-                    });
-                }
                 _ = self.context.cancelled() => { return Err(Terminated) },
+                connection = server.accept() => { self.process_connection(connection).await }
             }
         }
     }
@@ -77,7 +71,7 @@ impl Monitor {
 
     async fn process_stream(&self, stream: TokioIo<TcpStream>) {
         let service = service_fn(move |request| self.get_health(request));
-        if let Err(error) = http1::Builder::new().serve_connection(stream, service).await {
+        if let Err(error) = http1::Builder::new().keep_alive(false).serve_connection(stream, service).await {
             error!("{}", error);
         }
     }
