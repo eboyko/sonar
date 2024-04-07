@@ -1,6 +1,6 @@
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{Error, Write};
+use std::io::{Write};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Acquire;
@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering::Acquire;
 use chrono::Utc;
 use log::error;
 
-use crate::recorder::error::Error as RecorderError;
+use crate::recorder::error::{Error as RecorderError, Error};
 use crate::recorder::error::Error::OperationFailed;
 
 mod tests;
