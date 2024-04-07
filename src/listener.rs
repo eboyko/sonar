@@ -1,115 +1,111 @@
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Acquire;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use log::{debug, error, info, warn};
+use futures_util::StreamExt;
+use reqwest::Response;
 use tokio::select;
+use tokio::time::{sleep, timeout};
+use tokio_util::bytes;
 use tokio_util::sync::CancellationToken;
-use ureq::{Agent, AgentBuilder, Response};
 
-use crate::error::Error;
-use crate::error::Error::{CommunicationError, TerminationError};
+use crate::listener::error::Error;
 use crate::recorder::Recorder;
-use crate::settings::Settings;
+
+mod error;
+
+const SLEEP_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(crate) struct Listener {
-    agent: Agent,
+    url: String,
+    timeout: Duration,
+    recorder: Arc<Recorder>,
     context: CancellationToken,
-    recorder: Arc<RwLock<Recorder>>,
-    settings: Arc<Settings>,
+    pub(crate) bytes: AtomicUsize,
 }
 
 impl Listener {
-    pub async fn listen_stream(&mut self) {
+    pub(crate) fn new(
+        url: String,
+        timeout: Duration,
+        recorder: Arc<Recorder>,
+        context: CancellationToken,
+    ) -> Self {
+        Listener {
+            url,
+            timeout,
+            recorder,
+            context,
+            bytes: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn get_bytes(&self) -> usize {
+        self.bytes.load(Acquire)
+    }
+
+    pub async fn start(&self) -> Result<(), Error> {
         loop {
-            match self.connect().await {
-                Err(CommunicationError) => {
-                    error!("Communication error occurred");
-                    continue;
+            match self.listen().await {
+                termination @ Error::Terminated => {
+                    self.recorder.flush();
+                    return Err(termination);
                 }
-                Err(TerminationError) => {
-                    warn!("Shutting down");
-                    break;
-                }
-                _ => continue,
+                _ => self.pause().await?
             }
         }
     }
 
-    async fn connect(&mut self) -> Result<(), Error> {
-        match self.agent.get(&self.settings.url).call() {
-            Ok(response) => self.handle_response(response).await?,
-            Err(error) => self.handle_error(error).await?,
+    async fn pause(&self) -> Result<(), Error> {
+        let sleep_initial_time = Instant::now();
+
+        while sleep_initial_time.elapsed() < self.timeout {
+            select! {
+                _ = self.context.cancelled() => { return Err(Error::Terminated) }
+                _ = sleep(SLEEP_INTERVAL) => {}
+            }
         }
 
         Ok(())
     }
 
-    async fn handle_error(&self, error: ureq::Error) -> Result<(), Error> {
-        error!(
-            "Connection error ({}). Retry in {} seconds.",
-            error,
-            self.settings.timeout.as_secs()
-        );
-
-        let handle_time = Instant::now();
-        let retry_interval = Duration::from_millis(500);
-
-        while handle_time.elapsed() < self.settings.timeout {
-            select! {
-                context = self.context.cancelled() => { return Err(TerminationError) }
-                nothing = tokio::time::sleep(retry_interval) => {}
-            }
+    async fn listen(&self) -> Error {
+        match reqwest::get(&self.url).await {
+            Ok(response) => self.process_response(response).await,
+            Err(error) => Error::ConnectionFailed(error),
         }
-
-        Ok(())
     }
 
-    async fn handle_response(&mut self, response: Response) -> Result<(), Error> {
-        info!("Successfully connected to {}", self.settings.url);
-
-        let mut reader = response.into_reader();
-        let mut buffer = vec![0; 2048];
+    async fn process_response(&self, response: Response) -> Error {
+        let mut stream = response.bytes_stream();
 
         loop {
             select! {
-                payload = async { reader.read(&mut buffer) } => {
-                    let mut recorder = self.recorder.write().unwrap();
-
+                payload = timeout(self.timeout, stream.next()) => {
                     match payload {
-                        Ok(length) => {
-                            debug!("{} bytes received", length);
-                            recorder.write(&buffer[..length]);
-                        }
-                        Err(error) => {
-                            error!("Reading error ({})", error);
-
-                            recorder.write(&buffer[..buffer.len()]);
-                            recorder.flush();
-
-                            return Err(CommunicationError);
-                        }
+                        Ok(Some(Ok(data))) => self.write_data(data),
+                        Ok(Some(Err(error))) => return Error::StreamCorrupted(error),
+                        Ok(None) => return Error::StreamEmpty,
+                        Err(error) => return Error::StreamElapsed(error),
                     }
-                }
-                nothing = self.context.cancelled() => { return Err(TerminationError) }
+                },
+                _ = self.context.cancelled() => return Error::Terminated
             }
         }
+    }
+
+    fn write_data(&self, data: bytes::Bytes) {
+        self.recorder.write(&data);
+        self.bytes.fetch_add(data.len(), Acquire);
     }
 }
 
 pub(crate) fn build(
-    settings: Arc<Settings>,
-    recorder: Arc<RwLock<Recorder>>,
+    url: String,
+    timeout: Duration,
+    recorder: Arc<Recorder>,
     context: CancellationToken,
-) -> Listener {
-    let agent = AgentBuilder::new()
-        .timeout_connect(settings.timeout)
-        .timeout_read(settings.timeout)
-        .build();
-
-    Listener {
-        agent,
-        settings,
-        recorder,
-        context,
-    }
+) -> Arc<Listener> {
+    Arc::new(Listener::new(url, timeout, recorder, context))
 }
