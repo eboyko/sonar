@@ -1,89 +1,111 @@
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::Relaxed;
-use std::thread::sleep;
+use std::sync::Arc;
 use std::time::Instant;
 
 use http_body_util::Full;
 use hyper::{Request, Response};
-use hyper::body::Bytes;
+use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use log::{debug, error, info, warn};
-use serde_json::json;
+use log::error;
+use serde_json::{json, Value};
 use tokio::io::Result as Connection;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 
-use crate::error::Error;
+use crate::listener::Listener;
+use crate::monitor::error::Error as MonitorError;
+use crate::monitor::error::Error::{PortBindingFailed, Terminated};
 use crate::recorder::Recorder;
 
+mod error;
+
+#[derive(Clone)]
 pub(crate) struct Monitor {
-    start_time: Instant,
-    server: TcpListener,
-    recorder: Arc<RwLock<Recorder>>,
+    listener: Arc<Listener>,
+    recorder: Arc<Recorder>,
     context: CancellationToken,
+    start_time: Instant,
 }
 
 impl Monitor {
-    pub async fn start(&mut self) {
-        info!("Started");
+    pub(crate) fn new(
+        listener: Arc<Listener>,
+        recorder: Arc<Recorder>,
+        context: CancellationToken,
+    ) -> Self {
+        Monitor {
+            listener,
+            recorder,
+            context,
+            start_time: Instant::now(),
+        }
+    }
+
+    pub async fn start(&self) -> Result<(), MonitorError> {
+        let server = self.create_server().await?;
 
         loop {
             select! {
-                request = self.server.accept() => { self.handle_request(request).await }
-                context = self.context.cancelled() => {
-                    warn!("Shutting down");
-                    break
+                connection = server.accept() => {
+                    let monitor = self.clone();
+                    tokio::task::spawn(async move {
+                        monitor.process_connection(connection).await
+                    });
                 }
+                _ = self.context.cancelled() => { return Err(Terminated) },
             }
         }
     }
 
-    async fn handle_request(&self, request: Connection<(TcpStream, SocketAddr)>) {
-        match request {
-            Ok((stream, _)) => { self.process_request(stream).await }
-            Err(error) => error!("Error accepting connection: {}", error)
+    async fn create_server(&self) -> Result<TcpListener, MonitorError> {
+        match TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 3000))).await {
+            Ok(server) => Ok(server),
+            Err(error) => Err(PortBindingFailed(error)),
         }
     }
 
-    async fn process_request(&self, stream: TcpStream) {
-        let connection = TokioIo::new(stream);
-        let service = service_fn(move |request| self.health(request));
-
-        if let Err(error) = http1::Builder::new().serve_connection(connection, service).await {
-            error!("Error: {}", error);
+    async fn process_connection(&self, connection: Connection<(TcpStream, SocketAddr)>) {
+        match connection {
+            Ok((stream, _)) => self.process_stream(TokioIo::new(stream)).await,
+            Err(error) => error!("{}", error),
         }
     }
 
-    pub async fn health(&self, _: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    async fn process_stream(&self, stream: TokioIo<TcpStream>) {
+        let service = service_fn(move |request| self.get_health(request));
+        if let Err(error) = http1::Builder::new().serve_connection(stream, service).await {
+            error!("{}", error);
+        }
+    }
+
+    pub async fn get_health(&self, _request: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
         let payload = json!({
             "health": {
                 "uptime": self.start_time.elapsed().as_secs(),
-                "bytes_written": self.recorder.read().unwrap().bytes_counter,
-                "errors": []
+                "bytes_received": self.listener.get_bytes(),
+                "bytes_written": self.recorder.get_bytes()
             }
         });
 
-        let body = Full::from(Bytes::from(payload.to_string()));
+        Ok(self.build_response(payload))
+    }
 
-        let response =
-            Response::builder()
-                .header("Content-Type", "application/json")
-                .body(body)
-                .unwrap();
-
-        Ok(response)
+    fn build_response(&self, payload: Value) -> Response<Full<Bytes>> {
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .body(Full::from(Bytes::from(payload.to_string())))
+            .unwrap()
     }
 }
 
-pub(crate) async fn build(recorder: Arc<RwLock<Recorder>>, context: CancellationToken) -> Result<Monitor, Error> {
-    let address = SocketAddr::from(([0, 0, 0, 0], 3000));
-    let server = TcpListener::bind(address).await?;
-
-    Ok(Monitor { start_time: Instant::now(), server, recorder, context })
+pub(crate) async fn build(
+    listener: Arc<Listener>,
+    recorder: Arc<Recorder>,
+    context: CancellationToken,
+) -> Result<Arc<Monitor>, MonitorError> {
+    Ok(Arc::new(Monitor::new(listener, recorder, context)))
 }
