@@ -1,6 +1,6 @@
+use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Acquire;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
@@ -10,7 +10,8 @@ use tokio::time::{sleep, timeout};
 use tokio_util::bytes;
 use tokio_util::sync::CancellationToken;
 
-use crate::listener::error::Error;
+use crate::listener::error::Error as ListenerError;
+use crate::listener::error::Error::{ConnectionFailed, StreamCorrupted, StreamElapsed, StreamEmpty, Terminated};
 use crate::recorder::Recorder;
 
 mod error;
@@ -45,10 +46,10 @@ impl Listener {
         self.bytes.load(Acquire)
     }
 
-    pub async fn start(&self) -> Result<(), Error> {
+    pub async fn start(&self) -> Result<(), ListenerError> {
         loop {
             match self.listen().await {
-                termination @ Error::Terminated => {
+                termination @ Terminated => {
                     self.recorder.flush();
                     return Err(termination);
                 }
@@ -57,12 +58,12 @@ impl Listener {
         }
     }
 
-    async fn pause(&self) -> Result<(), Error> {
+    async fn pause(&self) -> Result<(), ListenerError> {
         let sleep_initial_time = Instant::now();
 
         while sleep_initial_time.elapsed() < self.timeout {
             select! {
-                _ = self.context.cancelled() => { return Err(Error::Terminated) }
+                _ = self.context.cancelled() => { return Err(Terminated) }
                 _ = sleep(SLEEP_INTERVAL) => {}
             }
         }
@@ -70,14 +71,14 @@ impl Listener {
         Ok(())
     }
 
-    async fn listen(&self) -> Error {
+    async fn listen(&self) -> ListenerError {
         match reqwest::get(&self.url).await {
             Ok(response) => self.process_response(response).await,
-            Err(error) => Error::ConnectionFailed(error),
+            Err(error) => ConnectionFailed(error),
         }
     }
 
-    async fn process_response(&self, response: Response) -> Error {
+    async fn process_response(&self, response: Response) -> ListenerError {
         let mut stream = response.bytes_stream();
 
         loop {
@@ -85,12 +86,12 @@ impl Listener {
                 payload = timeout(self.timeout, stream.next()) => {
                     match payload {
                         Ok(Some(Ok(data))) => self.write_data(data),
-                        Ok(Some(Err(error))) => return Error::StreamCorrupted(error),
-                        Ok(None) => return Error::StreamEmpty,
-                        Err(error) => return Error::StreamElapsed(error),
+                        Ok(Some(Err(error))) => return StreamCorrupted(error),
+                        Ok(None) => return StreamEmpty,
+                        Err(error) => return StreamElapsed(error),
                     }
                 },
-                _ = self.context.cancelled() => return Error::Terminated
+                _ = self.context.cancelled() => return Terminated
             }
         }
     }
