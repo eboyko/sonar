@@ -1,18 +1,18 @@
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{Write};
-use std::sync::{Arc, Mutex};
+use std::io::Write;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Acquire;
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
-use log::error;
+use log::{error, info};
 
-use crate::recorder::error::{Error as RecorderError, Error};
+use crate::recorder::error::Error as RecorderError;
 use crate::recorder::error::Error::OperationFailed;
 
-mod tests;
 mod error;
+mod tests;
 
 pub struct Recorder {
     path: String,
@@ -39,12 +39,12 @@ impl Recorder {
         if current_file.as_mut().is_none() {
             match self.create_file() {
                 Ok(new_file) => *current_file = Some(new_file),
-                Err(error) => error!("{}", error)
+                Err(error) => error!("{}", error),
             }
         }
 
         match current_file.as_mut().unwrap().write_all(data) {
-            Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); }
+            Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); },
             Err(error) => error!("{}", error),
         }
     }
@@ -62,14 +62,17 @@ impl Recorder {
         let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let filepath = format!("{}/{}.mp3", self.path, timestamp);
 
-        match OpenOptions::new().create(true).append(true).open(filepath) {
-            Ok(file) => Ok(file),
+        match OpenOptions::new().create(true).append(true).open(&filepath) {
+            Ok(file) => {
+                info!("New file `{}` created", &filepath);
+                Ok(file)
+            },
             Err(error) => Err(OperationFailed(error)),
         }
     }
 }
 
-pub(crate) fn build(path: String) -> Result<Arc<Recorder>, Error> {
+pub(crate) fn build(path: String) -> Result<Arc<Recorder>, RecorderError> {
     fs::create_dir_all(&path)?;
     Ok(Arc::new(Recorder::new(path)))
 }

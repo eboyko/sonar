@@ -24,3 +24,5 @@ impl From<std::io::Error> for Error {
         Error::OperationFailed(error)
     }
 }
+
+impl std::error::Error for Error {}

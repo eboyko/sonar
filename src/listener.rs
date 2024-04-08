@@ -1,9 +1,10 @@
-use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Acquire;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
+use log::{error, info, warn};
 use reqwest::Response;
 use tokio::select;
 use tokio::time::{sleep, timeout};
@@ -11,7 +12,9 @@ use tokio_util::bytes;
 use tokio_util::sync::CancellationToken;
 
 use crate::listener::error::Error as ListenerError;
-use crate::listener::error::Error::{ConnectionFailed, StreamCorrupted, StreamElapsed, StreamEmpty, Terminated};
+use crate::listener::error::Error::{
+    ConnectionFailed, StreamCorrupted, StreamElapsed, StreamEmpty, Terminated,
+};
 use crate::recorder::Recorder;
 
 mod error;
@@ -50,10 +53,15 @@ impl Listener {
         loop {
             match self.listen().await {
                 termination @ Terminated => {
+                    warn!("Termination signal received. Shutting down.");
                     self.recorder.flush();
                     return Err(termination);
                 }
-                _ => self.pause().await?
+                error => {
+                    error!("{}. Reconnecting in {} seconds.", error, self.timeout.as_secs());
+                    self.recorder.flush();
+                    self.pause().await?
+                }
             }
         }
     }
@@ -80,6 +88,7 @@ impl Listener {
 
     async fn process_response(&self, response: Response) -> ListenerError {
         let mut stream = response.bytes_stream();
+        info!("Listening to {}", self.url);
 
         loop {
             select! {

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::env;
 
-use url::Url;
 use crate::settings::error::Error;
-use crate::settings::error::Error::{ArgumentInvalid, ArgumentPrefixCorrupted, CommandLineCorrupted, UrlFormatInvalid};
+use crate::settings::error::Error::{ArgumentInvalid, ArgumentPrefixCorrupted, CommandLineCorrupted, PortInvalid, UrlInvalid};
+use url::Url;
 
 // List of arguments that can be passed to the application from the command line
-const PERMITTED_ARGUMENTS: [&str; 2] = ["path", "url"];
+const PERMITTED_ARGUMENTS: [&str; 3] = ["path", "url", "port"];
 
 pub(crate) fn fetch_arguments() -> Result<HashMap<String, String>, Error> {
     let mut arguments = HashMap::new();
@@ -39,8 +39,18 @@ fn fetch_argument(
             return Err(ArgumentInvalid(key.to_string()));
         }
 
-        if key == "url" && Url::parse(raw_value).is_err() {
-            return Err(UrlFormatInvalid(raw_value.to_string()));
+        match key {
+            "url" => {
+                if Url::parse(raw_value).is_err() {
+                    return Err(UrlInvalid(raw_value.to_string()));
+                }
+            }
+            "port" => {
+                if raw_value.parse::<u16>().is_err() {
+                    return Err(PortInvalid(raw_value.to_string()));
+                }
+            }
+            _ => {}
         }
 
         Ok((key.to_string(), raw_value.to_string()))

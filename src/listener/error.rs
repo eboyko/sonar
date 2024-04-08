@@ -1,4 +1,6 @@
+use std::error::Error as StandardError;
 use std::fmt::{Display, Formatter, Result};
+
 use tokio::time::error::Elapsed;
 
 #[derive(Debug)]
@@ -10,6 +12,8 @@ pub(crate) enum Error {
     StreamElapsed(Elapsed),
 }
 
+impl StandardError for Error {}
+
 impl Display for Error {
     fn fmt(&self, formatter: &mut Formatter) -> Result {
         match self {
@@ -17,7 +21,7 @@ impl Display for Error {
             Error::ConnectionFailed(message) => write!(formatter, "Connection failed: {}", message),
             Error::StreamCorrupted(message) => write!(formatter, "Stream is corrupted ({})", message),
             Error::StreamEmpty => write!(formatter, "Stream is empty"),
-            Error::StreamElapsed(message) => write!(formatter, "Stream reading timeout ({})", message)
+            Error::StreamElapsed(message) => write!(formatter, "Stream reading timeout ({})", message),
         }
     }
 }
