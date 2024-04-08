@@ -81,7 +81,13 @@ impl Listener {
 
     async fn listen(&self) -> ListenerError {
         match reqwest::get(&self.url).await {
-            Ok(response) => self.process_response(response).await,
+            Ok(response) => {
+                if response.status() == 200 {
+                    self.process_response(response).await
+                } else {
+                    StreamEmpty
+                }
+            }
             Err(error) => ConnectionFailed(error),
         }
     }
