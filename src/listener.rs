@@ -1,126 +1,121 @@
-use crate::error::Error;
-use crate::error::Error::{CommunicationError, TerminationError};
-use crate::recorder::Recorder;
-use crate::settings::Settings;
-use log::{debug, error, info, warn};
-use signal_hook::consts::{SIGINT, SIGTERM};
-use signal_hook::iterator::Signals;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
-use std::sync::{Arc};
-use std::thread;
-use std::thread::sleep;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Acquire;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use ureq::{Agent, AgentBuilder, Response};
 
-const TERMINATION_SIGNALS: [i32; 2] = [SIGINT, SIGTERM];
+use futures_util::StreamExt;
+use log::{error, info, warn};
+use reqwest::Response;
+use tokio::select;
+use tokio::time::{sleep, timeout};
+use tokio_util::bytes;
+use tokio_util::sync::CancellationToken;
+
+use crate::listener::error::Error as ListenerError;
+use crate::listener::error::Error::{
+    ConnectionFailed, StreamCorrupted, StreamElapsed, StreamEmpty, Terminated,
+};
+use crate::recorder::Recorder;
+
+mod error;
+
+const SLEEP_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(crate) struct Listener {
-    agent: Agent,
-    settings: Settings,
-    recorder: Recorder,
+    url: String,
+    timeout: Duration,
+    recorder: Arc<Recorder>,
+    context: CancellationToken,
+    pub(crate) bytes: AtomicUsize,
 }
 
 impl Listener {
-    pub fn start(&mut self) {
-        let terminator = Arc::new(AtomicBool::new(false));
-
-        self.listen_termination_signal(terminator.clone());
-        self.listen_stream(terminator.clone());
+    pub(crate) fn new(
+        url: String,
+        timeout: Duration,
+        recorder: Arc<Recorder>,
+        context: CancellationToken,
+    ) -> Self {
+        Listener {
+            url,
+            timeout,
+            recorder,
+            context,
+            bytes: AtomicUsize::new(0),
+        }
     }
 
-    fn listen_termination_signal(&self, terminator: Arc<AtomicBool>) {
-        let mut signals = Signals::new(TERMINATION_SIGNALS).unwrap();
-
-        thread::spawn(move || {
-            for signal in signals.forever() {
-                warn!("Signal {} received", signal);
-
-                if TERMINATION_SIGNALS.contains(&signal) {
-                    warn!("Termination signal received");
-                    return terminator.store(true, Relaxed);
-                }
-            }
-        });
+    pub fn get_bytes(&self) -> usize {
+        self.bytes.load(Acquire)
     }
 
-    fn listen_stream(&mut self, terminator: Arc<AtomicBool>) {
+    pub async fn start(&self) -> Result<(), ListenerError> {
         loop {
-            match self.connect(terminator.clone()) {
-                Err(CommunicationError) => {
-                    error!("Communication error occurred");
-                    continue;
-                }
-                Err(TerminationError) => {
-                    warn!("Shutting down");
-                    break;
-                }
-                _ => continue,
-            }
-        }
-    }
-
-    fn connect(&mut self, terminator: Arc<AtomicBool>) -> Result<(), Error> {
-        match self.agent.get(&self.settings.url).call() {
-            Ok(response) => self.handle_response(response, terminator.clone())?,
-            Err(error) => self.handle_error(error, terminator.clone())?,
-        }
-
-        Ok(())
-    }
-
-    fn handle_error(&self, error: ureq::Error, terminator: Arc<AtomicBool>) -> Result<(), Error> {
-        error!("Connection error ({}). Retry in {} seconds.", error, self.settings.timeout.as_secs());
-
-        let time = Instant::now();
-        let retry_interval = Duration::from_millis(500);
-
-        while time.elapsed() < self.settings.timeout {
-            if terminator.load(Relaxed) {
-                return Err(TerminationError);
-            }
-
-            sleep(retry_interval);
-        }
-
-        Ok(())
-    }
-
-    fn handle_response(&mut self, response: Response, terminator: Arc<AtomicBool>) -> Result<(), Error> {
-        info!("Successfully connected to {}", self.settings.url);
-
-        let mut reader = response.into_reader();
-        let mut buffer = vec![0; 2048];
-
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(length) => {
-                    debug!("{} bytes received", length);
-                    self.recorder.write(&buffer[..length]);
-                }
-                Err(error) => {
-                    error!("Reading error ({})", error);
-                    self.recorder.write(&buffer[..buffer.len()]);
+            match self.listen().await {
+                termination @ Terminated => {
+                    warn!("Termination signal received. Shutting down.");
                     self.recorder.flush();
-                    return Err(CommunicationError);
+                    return Err(termination);
+                }
+                error => {
+                    error!("{}. Reconnecting in {} seconds.", error, self.timeout.as_secs());
+                    self.recorder.flush();
+                    self.pause().await?
                 }
             }
+        }
+    }
 
-            if terminator.load(Relaxed) {
-                return Err(TerminationError);
+    async fn pause(&self) -> Result<(), ListenerError> {
+        let sleep_initial_time = Instant::now();
+
+        while sleep_initial_time.elapsed() < self.timeout {
+            select! {
+                _ = self.context.cancelled() => { return Err(Terminated) }
+                _ = sleep(SLEEP_INTERVAL) => {}
             }
         }
+
+        Ok(())
+    }
+
+    async fn listen(&self) -> ListenerError {
+        match reqwest::get(&self.url).await {
+            Ok(response) => self.process_response(response).await,
+            Err(error) => ConnectionFailed(error),
+        }
+    }
+
+    async fn process_response(&self, response: Response) -> ListenerError {
+        let mut stream = response.bytes_stream();
+        info!("Listening to {}", self.url);
+
+        loop {
+            select! {
+                payload = timeout(self.timeout, stream.next()) => {
+                    match payload {
+                        Ok(Some(Ok(data))) => self.write_data(data),
+                        Ok(Some(Err(error))) => return StreamCorrupted(error),
+                        Ok(None) => return StreamEmpty,
+                        Err(error) => return StreamElapsed(error),
+                    }
+                },
+                _ = self.context.cancelled() => return Terminated
+            }
+        }
+    }
+
+    fn write_data(&self, data: bytes::Bytes) {
+        self.recorder.write(&data);
+        self.bytes.fetch_add(data.len(), Acquire);
     }
 }
 
-pub(crate) fn build(settings: Settings, recorder: Recorder) -> Listener {
-    let agent = AgentBuilder::new()
-        .timeout_connect(settings.timeout)
-        .timeout_read(settings.timeout)
-        .build();
-
-    Listener {
-        settings,
-        recorder,
-        agent,
-    }
+pub(crate) fn build(
+    url: String,
+    timeout: Duration,
+    recorder: Arc<Recorder>,
+    context: CancellationToken,
+) -> Arc<Listener> {
+    Arc::new(Listener::new(url, timeout, recorder, context))
 }

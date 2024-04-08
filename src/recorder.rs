@@ -1,53 +1,78 @@
-use log::{debug, error};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::Acquire;
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
+use log::{error, info};
 
-pub(crate) struct Recorder {
+use crate::recorder::error::Error as RecorderError;
+use crate::recorder::error::Error::OperationFailed;
+
+mod error;
+mod tests;
+
+pub struct Recorder {
     path: String,
-    file: Option<File>,
+    file: Mutex<Option<File>>,
+    bytes: AtomicUsize,
 }
 
 impl Recorder {
-    pub fn write(&mut self, data: &[u8]) {
-        match self.file {
-            Some(ref mut file) => match file.write_all(data) {
-                Ok(_) => debug!("{} bytes written", data.len()),
-                Err(error) => error!("Could not write the data: {}", error),
-            },
-            None => {
-                self.create_file();
-                self.write(data);
+    pub fn new(path: String) -> Self {
+        Recorder {
+            path,
+            file: Mutex::new(None),
+            bytes: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn get_bytes(&self) -> usize {
+        self.bytes.load(Acquire)
+    }
+
+    pub fn write(&self, data: &[u8]) {
+        let mut current_file = self.file.lock().unwrap();
+
+        if current_file.as_mut().is_none() {
+            match self.create_file() {
+                Ok(new_file) => *current_file = Some(new_file),
+                Err(error) => error!("{}", error),
+            }
+        }
+
+        match current_file.as_mut().unwrap().write_all(data) {
+            Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); },
+            Err(error) => error!("{}", error),
+        }
+    }
+
+    pub fn flush(&self) {
+        if let Ok(mut lock) = self.file.lock() {
+            if let Some(file) = lock.as_mut() {
+                file.flush().unwrap();
+                *lock = None;
             }
         }
     }
 
-    pub fn flush(&mut self) {
-        if let Some(file) = &mut self.file {
-            match file.flush() {
-                Ok(_) => self.file = None,
-                Err(error) => error!("Could not flush the file: {}", error),
-            }
-        }
-    }
-
-    fn create_file(&mut self) {
+    fn create_file(&self) -> Result<File, RecorderError> {
         let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let filepath = format!("{}/{}.mp3", self.path, timestamp);
 
-        match OpenOptions::new().create(true).append(true).open(filepath) {
-            Ok(file) => self.file = Some(file),
-            Err(error) => error!("Could not create the file: {}", error),
-        };
+        match OpenOptions::new().create(true).append(true).open(&filepath) {
+            Ok(file) => {
+                info!("New file `{}` created", &filepath);
+                Ok(file)
+            },
+            Err(error) => Err(OperationFailed(error)),
+        }
     }
 }
 
-pub(crate) fn build(path: String) -> Result<Recorder, String> {
-    if let Err(error) = fs::create_dir_all(&path) {
-        return Err(format!("Could not create path `{}`: {}", path, error));
-    }
-
-    Ok(Recorder { path, file: None })
+pub(crate) fn build(path: String) -> Result<Arc<Recorder>, RecorderError> {
+    fs::create_dir_all(&path)?;
+    Ok(Arc::new(Recorder::new(path)))
 }

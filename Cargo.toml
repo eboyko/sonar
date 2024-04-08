@@ -1,6 +1,6 @@
 [package]
 name = "sonar"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,6 +9,14 @@ edition = "2021"
 chrono = "0.4.37"
 env_logger = "0.11.3"
 log = "0.4.21"
-ureq = { version = "2.9.6" }
 url = "2.5.0"
 signal-hook = "0.3.17"
+hyper = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
+http-body-util = "0.1"
+hyper-util = { version = "0.1", features = ["full"] }
+tokio-util = { version = "0.7.10", features = ["full"] }
+serde_json = "1.0.115"
+reqwest = { version = "0.12.3", features = ["stream"] }
+futures-util = "0.3.30"
+openssl-sys = { version = "0.9.102", features = ["vendored"] }
