@@ -23,7 +23,6 @@ use crate::recorder::Recorder;
 
 mod error;
 
-#[derive(Clone)]
 pub(crate) struct Monitor {
     port: u16,
     listener: Arc<Listener>,
