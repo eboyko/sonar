@@ -1,12 +1,14 @@
 # Sonar
 
-## Fast start
+## Usage
+
+### Example
 
 ```bash
 sonar --url https://nashe1.hostingradio.ru/ultra-256
 ```
 
-## Available options
+### Options
 
 ```
 Usage: sonar [OPTIONS] --url <STREAM_URL>
