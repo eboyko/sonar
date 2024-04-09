@@ -1,6 +1,6 @@
 [package]
 name = "sonar"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,3 +20,4 @@ serde_json = "1.0.115"
 reqwest = { version = "0.12.3", features = ["stream"] }
 futures-util = "0.3.30"
 openssl-sys = { version = "0.9.102", features = ["vendored"] }
+clap = { version = "4.5.4", features = ["derive"] }

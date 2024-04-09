@@ -1,9 +1,10 @@
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Acquire;
-use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use log::{error, info};
@@ -15,13 +16,13 @@ mod error;
 mod tests;
 
 pub struct Recorder {
-    path: String,
+    path: PathBuf,
     file: Mutex<Option<File>>,
     bytes: AtomicUsize,
 }
 
 impl Recorder {
-    pub fn new(path: String) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         Recorder {
             path,
             file: Mutex::new(None),
@@ -39,13 +40,13 @@ impl Recorder {
         if current_file.as_mut().is_none() {
             match self.create_file() {
                 Ok(new_file) => *current_file = Some(new_file),
-                Err(error) => error!("{}", error),
+                Err(error) => error!("{}", error)
             }
         }
 
         match current_file.as_mut().unwrap().write_all(data) {
-            Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); },
-            Err(error) => error!("{}", error),
+            Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); }
+            Err(error) => error!("{}", error)
         }
     }
 
@@ -60,19 +61,19 @@ impl Recorder {
 
     fn create_file(&self) -> Result<File, RecorderError> {
         let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
-        let filepath = format!("{}/{}.mp3", self.path, timestamp);
+        let filepath = self.path.join(format!("{}.mp3", timestamp));
 
         match OpenOptions::new().create(true).append(true).open(&filepath) {
             Ok(file) => {
-                info!("New file `{}` created", &filepath);
+                info!("New file `{}` created", &filepath.display());
                 Ok(file)
-            },
-            Err(error) => Err(OperationFailed(error)),
+            }
+            Err(error) => Err(OperationFailed(error))
         }
     }
 }
 
-pub(crate) fn build(path: String) -> Result<Arc<Recorder>, RecorderError> {
+pub(crate) fn build(path: PathBuf) -> Result<Arc<Recorder>, RecorderError> {
     fs::create_dir_all(&path)?;
     Ok(Arc::new(Recorder::new(path)))
 }

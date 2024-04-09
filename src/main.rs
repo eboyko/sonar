@@ -8,9 +8,11 @@ mod settings;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    let settings = settings::parse();
 
-    if let Err(error) = launcher::start().await {
+    env_logger::Builder::new().filter_level(settings.log_level).init();
+
+    if let Err(error) = launcher::start(settings).await {
         error!("{}", error);
     }
 }
