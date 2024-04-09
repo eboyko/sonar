@@ -1,33 +1,33 @@
-use std::sync::Arc;
+use std::num::ParseIntError;
+use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::settings::command_line_parser::fetch_arguments;
-use crate::settings::error::{Error, Error::PathOmitted, Error::UrlOmitted};
+use clap::Parser;
+use url::Url;
 
-mod command_line_parser;
-mod error;
+#[derive(Parser)]
+#[command(version, about)]
+pub(crate) struct Settings {
+    #[arg(long = "url", help = "Sets the capture stream URL")]
+    pub(crate) stream_url: Url,
 
-pub struct Settings {
-    pub path: String,
-    pub url: String,
-    pub port: u16,
-    pub timeout: Duration,
+    #[arg(long = "timeout", default_value = "5", value_parser = get_duration, help = "Sets the seconds for the stream connection timeout")]
+    pub(crate) stream_timeout: Duration,
+
+    #[arg(long = "path", default_value = "records", help = "Sets the path to the records directory")]
+    pub(crate) records_path: PathBuf,
+
+    #[arg(long = "port", default_value = "3000", help = "Sets the monitor server port")]
+    pub(crate) monitor_port_number: u16,
+
+    #[arg(long, default_value = "info", help = "Sets the log level")]
+    pub(crate) log_level: log::LevelFilter,
 }
 
-pub(crate) fn build() -> Result<Arc<Settings>, Error> {
-    let preferences = match fetch_arguments() {
-        Ok(arguments) => arguments,
-        Err(error) => return Err(error),
-    };
+pub(crate) fn parse() -> Settings {
+    Settings::parse()
+}
 
-    let path = preferences.get("path").ok_or(PathOmitted)?;
-    let url = preferences.get("url").ok_or(UrlOmitted)?;
-    let port = preferences.get("port").unwrap_or(&"3000".to_string()).parse::<u16>().unwrap();
-
-    Ok(Arc::new(Settings {
-        path: path.to_string(),
-        url: url.to_string(),
-        port,
-        timeout: Duration::from_secs(5),
-    }))
+fn get_duration(seconds: &str) -> Result<Duration, ParseIntError> {
+    Ok(Duration::from_secs(seconds.parse()?))
 }
