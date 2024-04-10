@@ -4,8 +4,14 @@ permissions: write-all
 
 on:
   push:
+    branches:
+      - master
     tags:
       - '*'
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches:
+      - master
 
 env:
   CARGO_TERM_COLOR: always
