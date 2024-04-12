@@ -21,3 +21,4 @@ reqwest = { version = "0.12.3", features = ["stream"] }
 futures-util = "0.3.30"
 openssl-sys = { version = "0.9.102", features = ["vendored"] }
 clap = { version = "4.5.4", features = ["derive"] }
+sysinfo = "0.30.10"
