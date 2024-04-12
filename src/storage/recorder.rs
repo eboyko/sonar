@@ -9,29 +9,34 @@ use std::sync::atomic::Ordering::Acquire;
 use chrono::Utc;
 use log::{error, info};
 
-use crate::recorder::error::Error as RecorderError;
-use crate::recorder::error::Error::OperationFailed;
-
-mod error;
-mod tests;
+use crate::storage::disk_inspector;
+use crate::storage::disk_inspector::DiskInspector;
+use crate::storage::error::Error;
+use crate::storage::error::Error::OperationFailed;
 
 pub struct Recorder {
     path: PathBuf,
     file: Mutex<Option<File>>,
-    bytes: AtomicUsize,
+    bytes_written: AtomicUsize,
+    disk_inspector: DiskInspector,
 }
 
 impl Recorder {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(path: &PathBuf, disk_inspector: DiskInspector) -> Self {
         Recorder {
-            path,
+            path: fs::canonicalize(path).unwrap(),
             file: Mutex::new(None),
-            bytes: AtomicUsize::new(0),
+            bytes_written: AtomicUsize::new(0),
+            disk_inspector,
         }
     }
 
-    pub fn get_bytes(&self) -> usize {
-        self.bytes.load(Acquire)
+    pub fn bytes_written(&self) -> usize {
+        self.bytes_written.load(Acquire)
+    }
+
+    pub fn bytes_available(&self) -> u64 {
+        self.disk_inspector.bytes_available()
     }
 
     pub fn write(&self, data: &[u8]) {
@@ -45,7 +50,7 @@ impl Recorder {
         }
 
         match current_file.as_mut().unwrap().write_all(data) {
-            Ok(_) => { self.bytes.fetch_add(data.len(), Acquire); }
+            Ok(_) => { self.bytes_written.fetch_add(data.len(), Acquire); }
             Err(error) => error!("{}", error)
         }
     }
@@ -59,7 +64,7 @@ impl Recorder {
         }
     }
 
-    fn create_file(&self) -> Result<File, RecorderError> {
+    fn create_file(&self) -> Result<File, Error> {
         let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
         let filepath = self.path.join(format!("{}.mp3", timestamp));
 
@@ -73,7 +78,7 @@ impl Recorder {
     }
 }
 
-pub(crate) fn build(path: PathBuf) -> Result<Arc<Recorder>, RecorderError> {
-    fs::create_dir_all(&path)?;
-    Ok(Arc::new(Recorder::new(path)))
+pub(crate) fn build(path: &PathBuf) -> Result<Arc<Recorder>, Error> {
+    let disk_inspector = disk_inspector::build(&path)?;
+    Ok(Arc::new(Recorder::new(path, disk_inspector)))
 }
