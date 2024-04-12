@@ -22,7 +22,7 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn new(path: &PathBuf, disk_inspector: DiskInspector) -> Self {
+    pub fn new(path: PathBuf, disk_inspector: DiskInspector) -> Self {
         Recorder {
             path: fs::canonicalize(path).unwrap(),
             file: Mutex::new(None),
@@ -78,7 +78,7 @@ impl Recorder {
     }
 }
 
-pub(crate) fn build(path: &PathBuf) -> Result<Arc<Recorder>, Error> {
+pub(crate) fn build(path: PathBuf) -> Result<Arc<Recorder>, Error> {
     let disk_inspector = disk_inspector::build(&path)?;
     Ok(Arc::new(Recorder::new(path, disk_inspector)))
 }

@@ -37,5 +37,5 @@ fn get_duration(seconds: &str) -> Result<Duration, ParseIntError> {
 fn get_records_path(path: &str) -> Result<PathBuf, std::io::Error> {
     let path = PathBuf::from(path);
     fs::create_dir_all(&path)?;
-    Ok(canonicalize(path)?)
+    canonicalize(path)
 }

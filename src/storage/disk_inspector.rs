@@ -1,5 +1,5 @@
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicI8, AtomicU8, AtomicUsize};
+use std::path::{Path};
+use std::sync::atomic::{AtomicUsize};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -49,7 +49,7 @@ impl DiskInspector {
     }
 }
 
-pub(crate) fn build(absolute_path: &PathBuf) -> Result<DiskInspector, Error> {
+pub(crate) fn build(absolute_path: &Path) -> Result<DiskInspector, Error> {
     let disks = Disks::new_with_refreshed_list();
 
     let active_disk_index = disks

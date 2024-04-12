@@ -36,7 +36,7 @@ pub(crate) async fn start(settings: Settings) -> Result<(), Box<dyn Error>> {
         context: CancellationToken::new(),
     });
 
-    let recorder = recorder::build(&settings.records_path)?;
+    let recorder = recorder::build(settings.records_path)?;
 
     let listener = listener::build(
         settings.stream_url,
