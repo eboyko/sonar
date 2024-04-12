@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Acquire;
+use std::sync::atomic::{AtomicUsize};
+use std::sync::atomic::Ordering::{Relaxed};
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
@@ -44,8 +44,8 @@ impl Listener {
         }
     }
 
-    pub fn get_bytes(&self) -> usize {
-        self.bytes.load(Acquire)
+    pub fn bytes_received(&self) -> usize {
+        self.bytes.load(Relaxed)
     }
 
     pub async fn start(&self) -> Result<(), ListenerError> {
@@ -112,7 +112,7 @@ impl Listener {
 
     fn write_data(&self, data: bytes::Bytes) {
         self.recorder.write(&data);
-        self.bytes.fetch_add(data.len(), Acquire);
+        self.bytes.fetch_add(data.len(), Relaxed);
     }
 }
 

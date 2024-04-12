@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::AtomicI8;
+use std::sync::atomic::{AtomicI8, AtomicU8, AtomicUsize};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,25 +12,25 @@ use crate::storage::error::Error::ActiveDiskDetectionFailed;
 pub(crate) struct DiskInspector {
     disks: RwLock<Disks>,
     active_disk_index: usize,
-    last_refresh_timestamp: AtomicI8,
+    last_refresh_timestamp: AtomicUsize,
 }
 
 impl DiskInspector {
-    const REFRESH_PERIOD_DURATION: i8 = 60;
+    const REFRESH_PERIOD_DURATION: usize = 60;
 
     pub(crate) fn new(disks: Disks, target_device_index: usize) -> Self {
         Self {
             disks: RwLock::from(disks),
             active_disk_index: target_device_index,
-            last_refresh_timestamp: AtomicI8::new(timestamp()),
+            last_refresh_timestamp: AtomicUsize::new(timestamp()),
         }
     }
 
-    pub(crate) fn bytes_available(&self) -> u64 {
+    pub(crate) fn bytes_available(&self) -> usize {
         self.ensure_refreshed();
 
         let disks = self.disks.read().unwrap();
-        disks[self.active_disk_index].available_space()
+        disks[self.active_disk_index].available_space() as usize
     }
 
     fn ensure_refreshed(&self) {
@@ -62,6 +62,6 @@ pub(crate) fn build(absolute_path: &PathBuf) -> Result<DiskInspector, Error> {
     }
 }
 
-fn timestamp() -> i8 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i8
+fn timestamp() -> usize {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize
 }

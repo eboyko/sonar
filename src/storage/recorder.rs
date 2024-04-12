@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize};
 use std::sync::atomic::Ordering::Acquire;
 
 use chrono::Utc;
@@ -35,7 +35,7 @@ impl Recorder {
         self.bytes_written.load(Acquire)
     }
 
-    pub fn bytes_available(&self) -> u64 {
+    pub fn bytes_available(&self) -> usize {
         self.disk_inspector.bytes_available()
     }
 
