@@ -8,7 +8,8 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use crate::settings::Settings;
-use crate::{listener, monitor, recorder};
+use crate::{listener, monitor};
+use crate::storage::recorder;
 
 pub(crate) struct Launcher {
     threads: TaskTracker,
@@ -35,7 +36,7 @@ pub(crate) async fn start(settings: Settings) -> Result<(), Box<dyn Error>> {
         context: CancellationToken::new(),
     });
 
-    let recorder = recorder::build(settings.records_path)?;
+    let recorder = recorder::build(&settings.records_path)?;
 
     let listener = listener::build(
         settings.stream_url,

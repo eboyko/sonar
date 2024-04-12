@@ -3,8 +3,8 @@ use log::error;
 mod launcher;
 mod listener;
 mod monitor;
-mod recorder;
 mod settings;
+mod storage;
 
 #[tokio::main]
 async fn main() {

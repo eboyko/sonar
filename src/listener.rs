@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::listener::error::Error as ListenerError;
 use crate::listener::error::Error::*;
-use crate::recorder::Recorder;
+use crate::storage::recorder::Recorder;
 
 mod error;
 
