@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use crate::listener::Listener;
 use crate::monitor::error::Error as MonitorError;
 use crate::monitor::error::Error::{PortBindingFailed, Terminated};
-use crate::recorder::Recorder;
+use crate::storage::recorder::Recorder;
 
 mod error;
 
@@ -98,9 +98,10 @@ impl Monitor {
 
         let payload = json!({
             "health": {
-                "uptime": self.start_time.elapsed().as_secs(),
                 "bytes_received": self.listener.get_bytes(),
-                "bytes_written": self.recorder.get_bytes()
+                "bytes_written": self.recorder.bytes_written(),
+                "bytes_available": self.recorder.bytes_available(),
+                "uptime": self.start_time.elapsed().as_secs(),
             }
         });
 
