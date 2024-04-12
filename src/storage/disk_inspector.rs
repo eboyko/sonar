@@ -1,7 +1,7 @@
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicI8;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sysinfo::Disks;
@@ -26,7 +26,7 @@ impl DiskInspector {
         }
     }
 
-    pub(crate) fn available_bytes(&self) -> u64 {
+    pub(crate) fn bytes_available(&self) -> u64 {
         self.ensure_refreshed();
 
         let disks = self.disks.read().unwrap();
@@ -49,7 +49,7 @@ impl DiskInspector {
     }
 }
 
-pub(crate) fn build(absolute_path: &PathBuf) -> Result<Arc<DiskInspector>, Error> {
+pub(crate) fn build(absolute_path: &PathBuf) -> Result<DiskInspector, Error> {
     let disks = Disks::new_with_refreshed_list();
 
     let active_disk_index = disks
@@ -57,7 +57,7 @@ pub(crate) fn build(absolute_path: &PathBuf) -> Result<Arc<DiskInspector>, Error
         .position(|device| absolute_path.starts_with(device.mount_point()));
 
     match active_disk_index {
-        Some(target_device_index) => Ok(Arc::new(DiskInspector::new(disks, target_device_index))),
+        Some(target_device_index) => Ok(DiskInspector::new(disks, target_device_index)),
         None => Err(ActiveDiskDetectionFailed),
     }
 }
