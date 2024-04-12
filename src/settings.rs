@@ -1,3 +1,5 @@
+use std::fs;
+use std::fs::canonicalize;
 use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -14,7 +16,7 @@ pub(crate) struct Settings {
     #[arg(long = "timeout", default_value = "5", value_parser = get_duration, help = "Sets the seconds for the stream connection timeout")]
     pub(crate) stream_timeout: Duration,
 
-    #[arg(long = "path", default_value = "records", help = "Sets the path to the records directory")]
+    #[arg(long = "path", default_value = "records", value_parser = get_records_path, help = "Sets the path to the records directory")]
     pub(crate) records_path: PathBuf,
 
     #[arg(long = "port", default_value = "3000", help = "Sets the monitor server port")]
@@ -30,4 +32,10 @@ pub(crate) fn parse() -> Settings {
 
 fn get_duration(seconds: &str) -> Result<Duration, ParseIntError> {
     Ok(Duration::from_secs(seconds.parse()?))
+}
+
+fn get_records_path(path: &str) -> Result<PathBuf, std::io::Error> {
+    let path = PathBuf::from(path);
+    fs::create_dir_all(&path)?;
+    Ok(canonicalize(path)?)
 }
