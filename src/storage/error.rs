@@ -10,7 +10,7 @@ impl Display for Error {
     fn fmt(&self, formatter: &mut Formatter) -> Result {
         match self {
             Error::ActiveDiskDetectionFailed => write!(formatter, "Could not detect an active disk for the provided path"),
-            Error::OperationFailed(error) => write!(formatter, "I/O operation failed: {}", error),
+            Error::OperationFailed(error) => write!(formatter, "{}", error),
         }
     }
 }

@@ -111,7 +111,11 @@ impl Listener {
     }
 
     fn write_data(&self, data: bytes::Bytes) {
-        self.recorder.write(&data);
+        if self.recorder.write(&data).is_err() {
+            error!("Unexpected error while writing the data. Terminating shortly.");
+            self.context.cancel();
+        }
+
         self.bytes.fetch_add(data.len(), Relaxed);
     }
 }

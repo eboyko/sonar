@@ -39,20 +39,27 @@ impl Recorder {
         self.disk_inspector.bytes_available()
     }
 
-    pub fn write(&self, data: &[u8]) {
+    pub fn write(&self, data: &[u8]) -> Result<(), Error> {
         let mut current_file = self.file.lock().unwrap();
 
         if current_file.as_mut().is_none() {
             match self.create_file() {
                 Ok(new_file) => *current_file = Some(new_file),
-                Err(error) => error!("{}", error)
+                Err(error) => {
+                    error!("{}", error);
+                    return Err(error);
+                }
             }
         }
 
-        match current_file.as_mut().unwrap().write_all(data) {
-            Ok(_) => { self.bytes_written.fetch_add(data.len(), Acquire); }
-            Err(error) => error!("{}", error)
+        if let Err(error) = current_file.as_mut().unwrap().write_all(data) {
+            error!("{}", error);
+            return Err(OperationFailed(error));
         }
+
+        self.bytes_written.fetch_add(data.len(), Acquire);
+        
+        Ok(())
     }
 
     pub fn flush(&self) {
