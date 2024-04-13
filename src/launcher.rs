@@ -8,7 +8,8 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use crate::settings::Settings;
-use crate::{listener, monitor, recorder};
+use crate::{listener, monitor};
+use crate::storage::recorder;
 
 pub(crate) struct Launcher {
     threads: TaskTracker,
