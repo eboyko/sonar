@@ -1,4 +1,4 @@
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::RwLock;
@@ -11,17 +11,17 @@ use crate::storage::error::Error::ActiveDiskDetectionFailed;
 
 pub(crate) struct DiskInspector {
     disks: RwLock<Disks>,
-    active_disk_index: usize,
+    mount_point: PathBuf,
     last_refresh_timestamp: AtomicUsize,
 }
 
 impl DiskInspector {
     const REFRESH_PERIOD_DURATION: usize = 60;
 
-    pub(crate) fn new(disks: Disks, target_device_index: usize) -> Self {
+    pub(crate) fn new(disks: Disks, mount_point: PathBuf) -> Self {
         Self {
             disks: RwLock::from(disks),
-            active_disk_index: target_device_index,
+            mount_point,
             last_refresh_timestamp: AtomicUsize::new(timestamp()),
         }
     }
@@ -30,7 +30,11 @@ impl DiskInspector {
         self.ensure_refreshed();
 
         let disks = self.disks.read().unwrap();
-        disks[self.active_disk_index].available_space() as usize
+        disks
+            .iter()
+            .find(|disk| disk.mount_point() == self.mount_point)
+            .map(|disk| disk.available_space() as usize)
+            .unwrap_or(0)
     }
 
     fn ensure_refreshed(&self) {
@@ -40,11 +44,14 @@ impl DiskInspector {
     }
 
     fn refresh_required(&self) -> bool {
-        self.last_refresh_timestamp.load(Relaxed) + Self::REFRESH_PERIOD_DURATION < timestamp()
+        let current_ts = timestamp();
+        let last_refresh = self.last_refresh_timestamp.load(Relaxed);
+        current_ts > last_refresh + Self::REFRESH_PERIOD_DURATION
     }
 
     fn refresh(&self) {
-        self.disks.write().unwrap().refresh();
+        let mut disks = self.disks.write().unwrap();
+        disks.refresh_list();
         self.last_refresh_timestamp.store(timestamp(), Relaxed);
     }
 }
@@ -52,12 +59,13 @@ impl DiskInspector {
 pub(crate) fn build(absolute_path: &Path) -> Result<DiskInspector, Error> {
     let disks = Disks::new_with_refreshed_list();
 
-    let active_disk_index = disks
+    let mount_point = disks
         .iter()
-        .position(|device| absolute_path.starts_with(device.mount_point()));
+        .find(|device| absolute_path.starts_with(device.mount_point()))
+        .map(|device| device.mount_point().to_path_buf());
 
-    match active_disk_index {
-        Some(target_device_index) => Ok(DiskInspector::new(disks, target_device_index)),
+    match mount_point {
+        Some(path) => Ok(DiskInspector::new(disks, path)),
         None => Err(ActiveDiskDetectionFailed),
     }
 }

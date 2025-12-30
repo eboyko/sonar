@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use http_body_util::Full;
-use hyper::{Request, Response};
 use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
+use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use log::{error, info, warn};
 use serde_json::{json, Value};
@@ -66,7 +66,10 @@ impl Monitor {
 
         match TcpListener::bind(address).await {
             Ok(server) => {
-                info!("Serving health requests on http://{}/health", server.local_addr().unwrap());
+                info!(
+                    "Serving health requests on http://{}/health",
+                    server.local_addr().unwrap()
+                );
                 Ok(server)
             }
             Err(error) => {
@@ -85,13 +88,18 @@ impl Monitor {
 
     async fn process_stream(&self, stream: TokioIo<TcpStream>) {
         let service = service_fn(move |request| self.get_health(request));
-        let handle = http1::Builder::new().keep_alive(false).serve_connection(stream, service);
+        let handle = http1::Builder::new()
+            .keep_alive(false)
+            .serve_connection(stream, service);
         if let Err(error) = handle.await {
             error!("{}", error);
         }
     }
 
-    pub async fn get_health(&self, request: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    pub async fn get_health(
+        &self,
+        request: Request<Incoming>,
+    ) -> Result<Response<Full<Bytes>>, Infallible> {
         if request.uri().path() != "/health" {
             return Ok(self.build_response(404, json!({ "success": "false" })));
         }
