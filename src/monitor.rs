@@ -124,8 +124,8 @@ impl Monitor {
             .unwrap()
     }
 
-    fn megabytes(&self, bytes: usize) -> f32 {
-        bytes as f32 / 1_048_576.0
+    fn megabytes(&self, bytes: u64) -> f64 {
+        bytes as f64 / 1_048_576.0
     }
 }
 

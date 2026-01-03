@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicUsize};
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Acquire;
 
 use chrono::Utc;
@@ -17,7 +17,7 @@ use crate::storage::error::Error::OperationFailed;
 pub struct Recorder {
     path: PathBuf,
     file: Mutex<Option<File>>,
-    bytes_written: AtomicUsize,
+    bytes_written: AtomicU64,
     disk_inspector: DiskInspector,
 }
 
@@ -26,16 +26,16 @@ impl Recorder {
         Recorder {
             path: fs::canonicalize(path).unwrap(),
             file: Mutex::new(None),
-            bytes_written: AtomicUsize::new(0),
+            bytes_written: AtomicU64::new(0),
             disk_inspector,
         }
     }
 
-    pub fn bytes_written(&self) -> usize {
+    pub fn bytes_written(&self) -> u64 {
         self.bytes_written.load(Acquire)
     }
 
-    pub fn bytes_available(&self) -> usize {
+    pub fn bytes_available(&self) -> u64 {
         self.disk_inspector.bytes_available()
     }
 
@@ -57,8 +57,8 @@ impl Recorder {
             return Err(OperationFailed(error));
         }
 
-        self.bytes_written.fetch_add(data.len(), Acquire);
-        
+        self.bytes_written.fetch_add(data.len() as u64, Acquire);
+
         Ok(())
     }
 

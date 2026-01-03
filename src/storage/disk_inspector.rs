@@ -26,14 +26,14 @@ impl DiskInspector {
         }
     }
 
-    pub(crate) fn bytes_available(&self) -> usize {
+    pub(crate) fn bytes_available(&self) -> u64 {
         self.ensure_refreshed();
 
         let disks = self.disks.read().unwrap();
         disks
             .iter()
             .find(|disk| disk.mount_point() == self.mount_point)
-            .map(|disk| disk.available_space() as usize)
+            .map(|disk| disk.available_space())
             .unwrap_or(0)
     }
 

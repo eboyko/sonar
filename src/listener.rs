@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize};
-use std::sync::atomic::Ordering::{Relaxed};
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
@@ -25,7 +25,7 @@ pub(crate) struct Listener {
     timeout: Duration,
     recorder: Arc<Recorder>,
     context: CancellationToken,
-    pub(crate) bytes: AtomicUsize,
+    pub(crate) bytes: AtomicU64,
 }
 
 impl Listener {
@@ -40,11 +40,11 @@ impl Listener {
             timeout,
             recorder,
             context,
-            bytes: AtomicUsize::new(0),
+            bytes: AtomicU64::new(0),
         }
     }
 
-    pub fn bytes_received(&self) -> usize {
+    pub fn bytes_received(&self) -> u64 {
         self.bytes.load(Relaxed)
     }
 
@@ -116,7 +116,7 @@ impl Listener {
             self.context.cancel();
         }
 
-        self.bytes.fetch_add(data.len(), Relaxed);
+        self.bytes.fetch_add(data.len() as u64, Relaxed);
     }
 }
 
