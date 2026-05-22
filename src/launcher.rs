@@ -2,14 +2,14 @@ use log::{info, warn};
 use std::error::Error;
 use std::sync::Arc;
 
-use signal_hook::consts::{SIGINT, SIGTERM};
-use signal_hook::iterator::Signals;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use crate::settings::Settings;
-use crate::{listener, monitor};
 use crate::storage::recorder;
+use crate::{listener, monitor};
 
 pub(crate) struct Launcher {
     threads: TaskTracker,
@@ -18,15 +18,18 @@ pub(crate) struct Launcher {
 
 impl Launcher {
     pub async fn listen_signals(&self) {
-        let context = self.context.clone();
-        let mut signals = Signals::new([SIGINT, SIGTERM]).unwrap();
+        let mut interrupt = signal(SignalKind::interrupt()).unwrap();
+        let mut terminate = signal(SignalKind::terminate()).unwrap();
         info!("Listening for termination signals.");
 
-        if signals.forever().next().is_some() {
-            warn!("Termination signal received. Shutting down.");
-            context.cancel();
-            self.threads.close();
+        select! {
+            _ = interrupt.recv() => {},
+            _ = terminate.recv() => {},
         }
+
+        warn!("Termination signal received. Shutting down.");
+        self.context.cancel();
+        self.threads.close();
     }
 }
 
