@@ -10,7 +10,6 @@ chrono = "0.4.37"
 env_logger = "0.11.3"
 log = "0.4.21"
 url = "2.5.0"
-signal-hook = "0.3.17"
 hyper = { version = "1", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 http-body-util = "0.1"
